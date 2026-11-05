@@ -20,6 +20,12 @@ import java.io.File
 object DragonwildsBootstrap {
     const val GAME_ID: String = "STEAM_1374490"
 
+    private fun rewriteLegacyEdrive(drives: String, context: Context): String {
+        val target = context.applicationInfo.dataDir + "/storage"
+        return drives.replace("/data/data/app.gamenative/storage", target)
+            .replace("/data/user/0/app.gamenative/storage", target)
+    }
+
     fun installFirstRunDefaults(context: Context) {
         val prefs = context.getSharedPreferences("dragonwilds_mobile_defaults", Context.MODE_PRIVATE)
         if (prefs.getBoolean("defaults_v3_applied", false)) {
@@ -47,6 +53,7 @@ object DragonwildsBootstrap {
         // Values retained from the supplied working screenshots.
         val configured = original.copy(
             name = "RuneScape: Dragonwilds",
+            drives = rewriteLegacyEdrive(original.drives, context),
             screenSize = "854x480",
             containerVariant = Container.BIONIC,
             wineVersion = "proton-11.0-1-arm64ec-1",
@@ -144,9 +151,14 @@ object DragonwildsBootstrap {
      * Call after creating the container and applying upstream game fixes,
      * before the first launch-executable validation. Never reimport files.
      */
-    fun ensureSteamGameLaunchConfig(container: Container) {
+    fun ensureSteamGameLaunchConfig(context: Context, container: Container) {
         if (container.id != GAME_ID) return
         var changed = false
+        val updatedDrives = rewriteLegacyEdrive(container.drives, context)
+        if (updatedDrives != container.drives) {
+            container.drives = updatedDrives
+            changed = true
+        }
         if (!container.isLaunchRealSteam) {
             container.isLaunchRealSteam = true
             changed = true
