@@ -98,6 +98,61 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         'only mark bundled EOS install on success',
     )
 
+    # Record the actual Wine guest process termination, which does not show up
+    # as an Android process-exit. This is the missing diagnostic for screen exits.
+    xserver_src = patch_once(
+        xserver_src,
+        '            return@Callback\n        }\n'
+        '        if (status != 0) {\n'
+        '            Timber.e("Guest program terminated with status: $status")\n',
+        '            return@Callback\n        }\n'
+        '        app.gamenative.ui.DragonwildsDiagnostics.recordGuestExit(context, appId, status)\n'
+        '        if (status != 0) {\n'
+        '            Timber.e("Guest program terminated with status: $status")\n',
+        'capture Wine guest exit status for Dragonwilds',
+    )
+    xserver_src = patch_once(
+        xserver_src,
+        '        Timber.i("onGuestProgramTerminated")\n'
+        '        SteamHostStatusWatch.stop()\n',
+        '        Timber.i("onGuestProgramTerminated")\n'
+        '        app.gamenative.ui.DragonwildsDiagnostics.recordSessionEnded(context, appId, "guest_terminated")\n'
+        '        SteamHostStatusWatch.stop()\n',
+        'capture game screen closure',
+    )
+
+    steamwatch_file = repo / 'app/src/main/java/app/gamenative/ui/screen/xserver/SteamHostStatusWatch.kt'
+    steamwatch_src = steamwatch_file.read_text(encoding='utf-8')
+    steamwatch_src = patch_once(
+        steamwatch_src,
+        '        file.delete()\n'
+        '        if (!active.compareAndSet(false, true)) return\n',
+        '        file.delete()\n'
+        '        app.gamenative.ui.DragonwildsDiagnostics.recordSteamWatcherStart(context)\n'
+        '        if (!active.compareAndSet(false, true)) return\n',
+        'record Steam watcher initialization',
+    )
+    steamwatch_src = patch_once(
+        steamwatch_src,
+        '                        last = status\n'
+        '                        val text = when (status.substringBefore(\' \')) {\n',
+        '                        last = status\n'
+        '                        app.gamenative.ui.DragonwildsDiagnostics.recordSteamStage(context, status)\n'
+        '                        val text = when (status.substringBefore(\' \')) {\n',
+        'record Steam startup status changes',
+    )
+
+    # Persist failures raised by headless Steam/Wine, not just Timber logs.
+    ui_src = patch_once(
+        ui_src,
+        '                        onGameLaunchError = { error ->\n'
+        '                            viewModel.onGameLaunchError(error)\n',
+        '                        onGameLaunchError = { error ->\n'
+        '                            app.gamenative.ui.DragonwildsDiagnostics.recordLaunchError(context, error)\n'
+        '                            viewModel.onGameLaunchError(error)\n',
+        'capture errors from Wine or headless Steam',
+    )
+
     # Reconcile the imported Steam app's container at launch time. The upstream
     # Steam game best-config application may overwrite the initial defaults;
     # explicitly restore our Steam/headless and known executable settings just
@@ -219,6 +274,7 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         marker_file: marker_src,
         prereq_file: prereq_src,
         xserver_file: xserver_src,
+        steamwatch_file: steamwatch_src,
         repo / 'app/src/main/java/app/gamenative/utils/preInstallSteps/DragonwildsEosStep.kt': (ROOT / 'DragonwildsEosStep.kt').read_text(encoding='utf-8'),
         repo / 'app/src/main/java/app/gamenative/ui/DragonwildsHome.kt': (ROOT / 'DragonwildsHome.kt').read_text(encoding='utf-8'),
         repo / 'app/src/main/java/app/gamenative/ui/DragonwildsDiagnostics.kt': (ROOT / 'DragonwildsDiagnostics.kt').read_text(encoding='utf-8'),
