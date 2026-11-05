@@ -3,6 +3,7 @@ package app.gamenative.ui
 import android.content.Context
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
+import app.gamenative.PrefManager
 import app.gamenative.data.AppInfo
 import app.gamenative.enums.Marker
 import app.gamenative.service.SteamService
@@ -35,6 +36,9 @@ internal object DragonwildsImport {
             val service = SteamService.instance ?: error("Steam service is not ready.")
             val steamApp = SteamService.getAppInfoOf(APP_ID)
                 ?: error("Dragonwilds metadata isn't ready yet. Reconnect to Steam.")
+            if (!SteamService.isAppLicensed(steamApp.packageId)) {
+                error("Steam license verification is not ready. Reconnect to Steam and retry.")
+            }
             val src = DocumentFile.fromTreeUri(context, treeUri)
                 ?.takeIf { it.isDirectory }
                 ?: error("Choose the Dragonwilds game directory, not an individual file.")
@@ -112,10 +116,20 @@ internal object DragonwildsImport {
             staging = null
             newTarget = dest
 
-            // Follow GameNative's own installed-game model rather than merely
-            // saving a Downloads path; this does not grant a Steam license.
+            // Follow GameNative's custom Steam game import model. The depot list
+            // comes from licensed Steam metadata, not from an invented manifest.
+            val mainDepotIds = SteamService.getMainAppDepots(APP_ID, PrefManager.containerLanguage)
+                .filter { (_, depot) -> depot.dlcAppId == SteamService.INVALID_APP_ID }
+                .keys.sorted()
             service.appInfoDao.insert(
-                AppInfo(id = APP_ID, isDownloaded = true, customInstallPath = dest.absolutePath),
+                AppInfo(
+                    id = APP_ID,
+                    isDownloaded = true,
+                    downloadedDepots = mainDepotIds,
+                    dlcDepots = emptyList(),
+                    branch = "public",
+                    customInstallPath = dest.absolutePath,
+                ),
             )
             if (!MarkerUtils.addMarker(dest.absolutePath, Marker.DOWNLOAD_COMPLETE_MARKER)) {
                 error("Could not register the imported game directory.")
