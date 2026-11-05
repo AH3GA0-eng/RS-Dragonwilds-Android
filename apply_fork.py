@@ -247,6 +247,39 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         'fix native evshim fallback for standalone app',
     )
 
+    # GameNative's upstream default is Wi-Fi-only downloads, including Steam.
+    # On this dedicated Dragonwilds fork, enable cellular by default and
+    # migrate any saved Wi-Fi-only value from previous APKs exactly once.
+    pref_file = repo / 'app/src/main/java/app/gamenative/PrefManager.kt'
+    pref_src = pref_file.read_text(encoding='utf-8')
+    pref_src = patch_once(
+        pref_src,
+        '        get() = getPref(DOWNLOAD_ON_WIFI_ONLY, true)\n',
+        '        get() = getPref(DOWNLOAD_ON_WIFI_ONLY, false)\n',
+        'enable cellular download default',
+    )
+    pref_src = patch_once(
+        pref_src,
+        '        dataStore = context.datastore\n',
+        '        dataStore = context.datastore\n'
+        '        // One-time migration: release the old Wi-Fi-only preference.\n'
+        '        // Keep later user choices intact. This runs before SteamService.\n'
+        '        runBlocking {\n'
+        '            dataStore.edit { values ->\n'
+        '                val migrated = booleanPreferencesKey("dragonwilds_cellular_migrated_v16")\n'
+        '                if (values[migrated] != true) {\n'
+        '                    values[DOWNLOAD_ON_WIFI_ONLY] = false\n'
+        '                    values[migrated] = true\n'
+        '                }\n'
+        '            }\n'
+        '        }\n',
+        'migrate existing Dragonwilds installs to cellular downloads',
+    )
+
+    # Show a dedicated Dragonwilds eye on the Android home screen instead of
+    # upstream GameNative's launcher image. This changes only our app variant.
+    eye_icon = repo / 'app/src/main/res/drawable/dragonwilds_eye.xml'
+    eye_adaptive = repo / 'app/src/main/res/mipmap-anydpi-v26/ic_dragonwilds.xml'
     gradle_src = gradle.read_text(encoding='utf-8')
     gradle_src = patch_once(gradle_src,
         'applicationId = "app.gamenative"',
@@ -299,6 +332,19 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         'increment APK version codes',
     )
 
+    gradle_src = patch_once(
+        gradle_src,
+        '        val iconValue = "@mipmap/ic_launcher"\n',
+        '        val iconValue = "@mipmap/ic_dragonwilds"\n',
+        'replace GameNative icon with dragon eye',
+    )
+    gradle_src = patch_once(
+        gradle_src,
+        '        val iconRoundValue = "@mipmap/ic_launcher_round"\n',
+        '        val iconRoundValue = "@mipmap/ic_dragonwilds"\n',
+        'replace GameNative round icon with dragon eye',
+    )
+
     strings_src = strings.read_text(encoding='utf-8')
     matches = list(re.finditer(r'<string\s+name="app_name">.*?</string>', strings_src, re.DOTALL))
     if len(matches) != 1:
@@ -311,6 +357,9 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         gradle: gradle_src,
         strings: strings_src,
         bootstrap: (ROOT / 'DragonwildsBootstrap.kt').read_text(encoding='utf-8'),
+        pref_file: pref_src,
+        eye_icon: (ROOT / 'dragonwilds_eye.xml').read_text(encoding='utf-8'),
+        eye_adaptive: (ROOT / 'ic_dragonwilds.xml').read_text(encoding='utf-8'),
         bionic_file: bionic_src,
         wine_file: wine_src,
         dxvk_file: dxvk_src,
