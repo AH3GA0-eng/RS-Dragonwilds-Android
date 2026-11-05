@@ -75,7 +75,7 @@ internal fun DragonwildsHome(
         DragonwildsDiagnostics.shouldHoldAutoLaunch(context)
     }
     val previousLaunchReport = remember(context) {
-        if (holdAutomaticLaunch) DragonwildsDiagnostics.report(context) else null
+        DragonwildsDiagnostics.report(context)
     }
 
     fun startDragonwilds() {
@@ -190,9 +190,14 @@ internal fun DragonwildsHome(
             Text("RuneScape: Dragonwilds", style = MaterialTheme.typography.headlineMedium)
 
             if (previousLaunchReport != null) {
-                Text("Previous session returned unexpectedly", color = MaterialTheme.colorScheme.error)
-                Text("Automatic retry is paused. Your imported game files are preserved.",
-                    style = MaterialTheme.typography.bodySmall)
+                Text("Last Dragonwilds launch")
+                Text(
+                    if (holdAutomaticLaunch)
+                        "Automatic retry is paused to prevent a launch loop. Game files are preserved."
+                    else
+                        "You can copy the previous launch details for troubleshooting.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 OutlinedButton(
                     onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
