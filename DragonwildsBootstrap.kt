@@ -1,12 +1,16 @@
 package app.gamenative
 
 import android.content.Context
+import android.content.Intent
+import app.gamenative.service.SteamService
+import app.gamenative.utils.IntentLaunchManager
 import app.gamenative.utils.ContainerUtils
 import com.winlator.box86_64.Box86_64Preset
 import com.winlator.container.Container
 import com.winlator.core.envvars.EnvVars
 import com.winlator.core.KeyValueSet
 import com.winlator.fexcore.FEXCorePreset
+import java.io.File
 
 /**
  * Applies the supplied phone's working defaults to NEW game containers.
@@ -18,7 +22,10 @@ object DragonwildsBootstrap {
 
     fun installFirstRunDefaults(context: Context) {
         val prefs = context.getSharedPreferences("dragonwilds_mobile_defaults", Context.MODE_PRIVATE)
-        if (prefs.getBoolean("defaults_v3_applied", false)) return
+        if (prefs.getBoolean("defaults_v3_applied", false)) {
+            migrateTouchControls(context, prefs)
+            return
+        }
 
         val original = ContainerUtils.getDefaultContainerData()
         val env = EnvVars(original.envVars)
@@ -64,6 +71,7 @@ object DragonwildsBootstrap {
             launchBionicSteam = false,
             steamType = Container.STEAM_TYPE_HEADLESS,
             steamOfflineMode = false,
+            shooterMode = false,
             sdlControllerAPI = true,
             useSteamInput = false,
             enableXInput = true,
@@ -90,5 +98,99 @@ object DragonwildsBootstrap {
         // Apply once and then persist the flag. No original app data is touched.
         ContainerUtils.setDefaultContainerData(configured)
         prefs.edit().putBoolean("defaults_v3_applied", true).apply()
+        migrateTouchControls(context, prefs)
+    }
+
+    /**
+     * One-time migration for already-created Dragonwilds Wine containers.
+     * The upstream controller overlay defaults to shooter mode, which hides
+     * the normal analog sticks. This changes only the Dragonwilds container.
+     * Other games and the original GameNative installation are untouched.
+     */
+    private fun migrateTouchControls(
+        context: Context,
+        prefs: android.content.SharedPreferences,
+    ) {
+        if (prefs.getBoolean("touch_controls_v11_applied", false)) return
+        val defaults = ContainerUtils.getDefaultContainerData()
+        ContainerUtils.setDefaultContainerData(defaults.copy(
+            shooterMode = false,
+            sdlControllerAPI = true,
+            useSteamInput = false,
+            enableXInput = true,
+        ))
+        try {
+            if (ContainerUtils.hasContainer(context, GAME_ID)) {
+                val container = ContainerUtils.getContainer(context, GAME_ID)
+                val existing = ContainerUtils.toContainerData(container)
+                ContainerUtils.applyToContainer(context, container, existing.copy(
+                    shooterMode = false,
+                    sdlControllerAPI = true,
+                    useSteamInput = false,
+                    enableXInput = true,
+                ))
+            }
+            prefs.edit().putBoolean("touch_controls_v11_applied", true).apply()
+        } catch (_: Exception) {
+            // Retry on next app launch if a container is not yet ready.
+        }
+    }
+
+    /**
+     * The game folder can be correctly imported while a new Steam container is
+     * still missing executable or real-Steam settings. GameNative otherwise
+     * displays "The executable could not be auto-selected".
+     *
+     * Call after creating the container and applying upstream game fixes,
+     * before the first launch-executable validation. Never reimport files.
+     */
+    fun ensureSteamGameLaunchConfig(container: Container) {
+        if (container.id != GAME_ID) return
+        var changed = false
+        if (!container.isLaunchRealSteam) {
+            container.isLaunchRealSteam = true
+            changed = true
+        }
+        if (container.isLaunchBionicSteam) {
+            container.isLaunchBionicSteam = false
+            changed = true
+        }
+        if (container.steamType != Container.STEAM_TYPE_HEADLESS) {
+            container.steamType = Container.STEAM_TYPE_HEADLESS
+            changed = true
+        }
+        if (container.executablePath.isBlank()) {
+            // Prefer Steam's launcher stub, then the UE shipping binary.
+            // The paths are relative to the imported game's own root.
+            val gameRoot = File(SteamService.getAppDirPath(1374490))
+            val chosen = listOf(
+                "RSDragonwilds.exe",
+                "RSDragonwilds/Binaries/Win64/RSDragonwilds-Win64-Shipping.exe",
+            ).firstOrNull { File(gameRoot, it).isFile }
+            if (chosen != null) {
+                container.executablePath = chosen
+                changed = true
+            }
+        }
+        if (container.execArgs.isBlank()) {
+            container.execArgs = "-dx11"
+            changed = true
+        }
+        if (changed) container.saveData()
+    }
+
+    /**
+     * Only queue the known Steam game when the user launches this app normally.
+     * The actual login, install check and game startup remain owned by PluviaMain.
+     * An exported folder by itself is NOT a registered Steam installation.
+     */
+    fun queueAutoLaunchIfInstalled(context: Context, launchIntent: Intent, restoring: Boolean) {
+        if (restoring || launchIntent.action != Intent.ACTION_MAIN || MainActivity.hasPendingLaunchRequest()) return
+        val installed = runCatching {
+            SteamService.isAppInstalled(1374490) ||
+                ContainerUtils.hasContainer(context, GAME_ID)
+        }.getOrDefault(false)
+        if (!installed) return
+        MainActivity.setPendingLaunchRequest(IntentLaunchManager.LaunchRequest(GAME_ID))
     }
 }

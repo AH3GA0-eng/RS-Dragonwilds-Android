@@ -45,6 +45,78 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         '        ContainerUtils.setContainerDefaults(applicationContext)\n' + INSERT_LINE,
         'first-run defaults')
 
+
+    # Keep GameNative's Steam login/game engine, but replace only its generic
+    # HomeScreen with a dedicated Dragonwilds-only setup/start screen.
+    ui_file = repo / 'app/src/main/java/app/gamenative/ui/PluviaMain.kt'
+    ui_src = ui_file.read_text(encoding='utf-8')
+    home_start = '                    HomeScreen(\n'
+    home_end = '                        isSteamConnected = state.isSteamConnected,\n                    )\n'
+    if ui_src.count(home_start) != 1 or ui_src.count(home_end) != 1:
+        raise ValueError('GameNative HomeScreen changed; refuse unsafe UI replacement')
+    begin = ui_src.index(home_start)
+    finish = ui_src.index(home_end, begin) + len(home_end)
+    ui_src = ui_src[:begin] + (
+        '                    DragonwildsHome(\n'
+        '                        onLaunch = { launchIntentApp("STEAM_1374490", false, null) },\n'
+        '                        onSignIn = { navController.navigate(PluviaScreen.LoginUser.route) },\n'
+        '                        onAdvancedSettings = { navController.navigate(PluviaScreen.Settings.route) },\n'
+        '                    )\n'
+    ) + ui_src[finish:]
+
+    # Dragonwilds needs to set up its own bundled EOS service in each new
+    # Wine prefix. GameNative's general prereq list does not include it.
+    marker_file = repo / 'app/src/main/java/app/gamenative/enums/Marker.kt'
+    marker_src = marker_file.read_text(encoding='utf-8')
+    marker_src = patch_once(
+        marker_src,
+        '    UBISOFT_CONNECT_INSTALLED(".ubisoft_connect_installed"),\n',
+        '    UBISOFT_CONNECT_INSTALLED(".ubisoft_connect_installed"),\n'
+        '    DRAGONWILDS_EOS_INSTALLED(".dragonwilds_eos_installed"),\n',
+        'Dragonwilds EOS marker',
+    )
+
+    prereq_file = repo / 'app/src/main/java/app/gamenative/utils/PreInstallSteps.kt'
+    prereq_src = prereq_file.read_text(encoding='utf-8')
+    prereq_src = patch_once(
+        prereq_src,
+        '        UbisoftConnectStep,\n',
+        '        UbisoftConnectStep,\n        DragonwildsEosStep,\n',
+        'register bundled EOS installer',
+    )
+
+    xserver_file = repo / 'app/src/main/java/app/gamenative/ui/screen/xserver/XServerScreen.kt'
+    xserver_src = xserver_file.read_text(encoding='utf-8')
+    xserver_src = patch_once(
+        xserver_src,
+        '            PreInstallSteps.markStepDone(container, current.marker)\n',
+        '            if (current.marker != Marker.DRAGONWILDS_EOS_INSTALLED || status == 0) {\n'
+        '                PreInstallSteps.markStepDone(container, current.marker)\n'
+        '            } else {\n'
+        '                Timber.w("EOS prerequisite returned exit code %d; retry on next launch", status)\n'
+        '            }\n',
+        'only mark bundled EOS install on success',
+    )
+
+    # Reconcile the imported Steam app's container at launch time. The upstream
+    # Steam game best-config application may overwrite the initial defaults;
+    # explicitly restore our Steam/headless and known executable settings just
+    # before the pre-launch executable validation.
+    launch_anchor = (
+        '        val gameSource = ContainerUtils.extractGameSourceFromContainerId(appId)\n'
+        '        val isLocalSavesOnly = ContainerUtils.isLocalSavesOnly(context, appId)\n'
+    )
+    launch_injection = (
+        '        if (appId == app.gamenative.DragonwildsBootstrap.GAME_ID && !bootToContainer) {\n'
+        '            app.gamenative.DragonwildsBootstrap.ensureSteamGameLaunchConfig(container)\n'
+        '        }\n'
+    )
+    ui_src = patch_once(
+        ui_src, launch_anchor,
+        launch_injection + launch_anchor,
+        'repair Dragonwilds Steam launch configuration before executable validation',
+    )
+
     gradle_src = gradle.read_text(encoding='utf-8')
     gradle_src = patch_once(gradle_src,
         'applicationId = "app.gamenative"',
@@ -63,6 +135,13 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         gradle: gradle_src,
         strings: strings_src,
         bootstrap: (ROOT / 'DragonwildsBootstrap.kt').read_text(encoding='utf-8'),
+        ui_file: ui_src,
+        marker_file: marker_src,
+        prereq_file: prereq_src,
+        xserver_file: xserver_src,
+        repo / 'app/src/main/java/app/gamenative/utils/preInstallSteps/DragonwildsEosStep.kt': (ROOT / 'DragonwildsEosStep.kt').read_text(encoding='utf-8'),
+        repo / 'app/src/main/java/app/gamenative/ui/DragonwildsHome.kt': (ROOT / 'DragonwildsHome.kt').read_text(encoding='utf-8'),
+        repo / 'app/src/main/java/app/gamenative/ui/DragonwildsImport.kt': (ROOT / 'DragonwildsImport.kt').read_text(encoding='utf-8'),
     }
 
 
