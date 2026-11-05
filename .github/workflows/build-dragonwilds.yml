@@ -53,6 +53,90 @@ jobs:
       - name: Apply Dragonwilds modifications
         run: python3 apply_fork.py GameNative
            
+      # Only a manual build may become an installable APK. A repository secret
+      # contains two lines: PKCS12 password and base64-encoded PKCS12 file.
+      # No signing key is committed or sent to GitHub Actions on PR builds.
+      - name: Prepare permanent Android signing key
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SIGNING_BUNDLE: ${{ secrets.DRAGONWILDS_SIGNING_BUNDLE }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${SIGNING_BUNDLE:-}" || "$SIGNING_BUNDLE" != *          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          find app/src/main/res -type f -name '*.dw-original' -print -delete
+          chmod +x gradlew
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            export DRAGONWILDS_SIGNING_PASSWORD="$(cat .dragonwilds-signing-password)"
+          fi
+          ./gradlew :app:assembleModernDebug --stacktrace --no-daemon --max-workers=2
+
+      - name: Verify permanent APK signer
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: GameNative
+        run: |
+          set -euo pipefail
+          mapfile -t apks < <(find app/build/outputs/apk/modern/debug -name '*.apk' -type f)
+          if [[ ${#apks[@]} -ne 1 ]]; then
+            echo "::error::Expected exactly one signed APK."
+            exit 1
+          fi
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "${apks[0]}" |
+            grep -q 'Signer #1 certificate DN: CN=Dragonwilds Mobile'
+          rm -f dragonwilds-signing.p12 .dragonwilds-signing-password
+
+
+
+
+      - name: Upload APK
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dragonwilds-Mobile-STABLE-SIGNED-APK-UNTESTED
+          path: GameNative/app/build/outputs/apk/modern/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+          
+\\n'* ]]; then
+            echo "::error::Set DRAGONWILDS_SIGNING_BUNDLE in repository Actions secrets before creating an installable APK."
+            exit 1
+          fi
+          password="${SIGNING_BUNDLE%%          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          find app/src/main/res -type f -name '*.dw-original' -print -delete
+          chmod +x gradlew
+          ./gradlew :app:assembleModernDebug --stacktrace --no-daemon --max-workers=2
+
+
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dragonwilds-Mobile-APK-UNTESTED
+          path: GameNative/app/build/outputs/apk/modern/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+          
+\\n'*}"
+          key_b64="${SIGNING_BUNDLE#*          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          find app/src/main/res -type f -name '*.dw-original' -print -delete
+          chmod +x gradlew
+          ./gradlew :app:assembleModernDebug --stacktrace --no-daemon --max-workers=2
+
+
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dragonwilds-Mobile-APK-UNTESTED
+          path: GameNative/app/build/outputs/apk/modern/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+          
+\\n'}"
+          printf '%s' "$key_b64" | tr -d '\\r\\n' | base64 --decode > GameNative/dragonwilds-signing.p12
+          printf '%s' "$password" > GameNative/.dragonwilds-signing-password
+          chmod 600 GameNative/dragonwilds-signing.p12 GameNative/.dragonwilds-signing-password
+          keytool -list -storetype PKCS12 -keystore GameNative/dragonwilds-signing.p12 -storepass "$password" -alias dragonwilds-mobile >/dev/null
+
       - name: Build ARM64 Android APK
         working-directory: GameNative
         run: |
