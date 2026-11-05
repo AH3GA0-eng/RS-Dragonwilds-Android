@@ -1,6 +1,9 @@
 package app.gamenative
 
 import android.content.Context
+import android.content.Intent
+import app.gamenative.service.SteamService
+import app.gamenative.utils.IntentLaunchManager
 import app.gamenative.utils.ContainerUtils
 import com.winlator.box86_64.Box86_64Preset
 import com.winlator.container.Container
@@ -90,5 +93,20 @@ object DragonwildsBootstrap {
         // Apply once and then persist the flag. No original app data is touched.
         ContainerUtils.setDefaultContainerData(configured)
         prefs.edit().putBoolean("defaults_v3_applied", true).apply()
+    }
+
+    /**
+     * Only queue the known Steam game when the user launches this app normally.
+     * The actual login, install check and game startup remain owned by PluviaMain.
+     * An exported folder by itself is NOT a registered Steam installation.
+     */
+    fun queueAutoLaunchIfInstalled(context: Context, launchIntent: Intent, restoring: Boolean) {
+        if (restoring || launchIntent.action != Intent.ACTION_MAIN || MainActivity.hasPendingLaunchRequest()) return
+        val installed = runCatching {
+            SteamService.isAppInstalled(1374490) ||
+                ContainerUtils.hasContainer(context, GAME_ID)
+        }.getOrDefault(false)
+        if (!installed) return
+        MainActivity.setPendingLaunchRequest(IntentLaunchManager.LaunchRequest(GAME_ID))
     }
 }
