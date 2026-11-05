@@ -117,6 +117,73 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         'repair Dragonwilds Steam launch configuration before executable validation',
     )
 
+    # Upstream contains hard-coded /data/data/app.gamenative paths. Once the
+    # Android package name is changed, those paths point to a DIFFERENT app's
+    # private storage. Repair them before compiling our standalone build.
+    bionic_file = repo / 'app/src/main/java/com/winlator/xenvironment/components/BionicProgramLauncherComponent.java'
+    bionic_src = bionic_file.read_text(encoding='utf-8')
+    bionic_src = patch_once(
+        bionic_src,
+        'memPath = "/data/data/app.gamenative/files/imagefs/tmp/gamepad.mem";',
+        'memPath = new File(new File(environment.getContext().getFilesDir(), "gamepad_shm"), "gamepad.mem").getAbsolutePath();',
+        'redirect player-1 controller shared memory to the standalone app',
+    )
+    bionic_src = patch_once(
+        bionic_src,
+        'memPath = "/data/data/app.gamenative/files/imagefs/tmp/gamepad" + i + ".mem";',
+        'memPath = new File(new File(environment.getContext().getFilesDir(), "gamepad_shm"), "gamepad" + i + ".mem").getAbsolutePath();',
+        'redirect other controller shared memory to the standalone app',
+    )
+    bionic_src = patch_once(
+        bionic_src,
+        '        Context context = environment.getContext();\n',
+        '        Context context = environment.getContext();\n'
+        '        envVars.put("EVSHIM_BASE_PATH", context.getFilesDir().getAbsolutePath());\n',
+        'set SDL evshim private shared-memory root',
+    )
+
+    wine_file = repo / 'app/src/main/java/com/winlator/core/WineUtils.java'
+    wine_src = wine_file.read_text(encoding='utf-8')
+    wine_src = patch_once(
+        wine_src,
+        'missingDrives += "E:/data/data/app.gamenative/storage";',
+        'missingDrives += "E:" + new File(context.getApplicationInfo().dataDir, "storage").getAbsolutePath();',
+        'map E drive to standalone storage',
+    )
+    wine_src = patch_once(
+        wine_src,
+        'path.endsWith("/app.gamenative/storage")',
+        'path.endsWith("/" + context.getPackageName() + "/storage")',
+        'fix own-app E drive directory creation',
+    )
+
+    dxvk_file = repo / 'app/src/main/java/com/winlator/core/DXVKHelper.java'
+    dxvk_src = dxvk_file.read_text(encoding='utf-8')
+    dxvk_src = patch_once(
+        dxvk_src,
+        '"/data/data/app.gamenative/files/imagefs"+ImageFs.CACHE_PATH',
+        'imageFs.getRootDir().getAbsolutePath()+ImageFs.CACHE_PATH',
+        'write DXVK cache to standalone ImageFs root',
+    )
+
+    container_file = repo / 'app/src/main/java/com/winlator/container/Container.java'
+    container_src = container_file.read_text(encoding='utf-8')
+    container_src = container_src.replace(
+        '/data/data/app.gamenative/',
+        f'/data/data/{app_id}/',
+    )
+    if container_src == container_file.read_text(encoding='utf-8'):
+        raise ValueError('Container.java did not contain expected app-private path literals')
+
+    evshim_file = repo / 'app/src/main/cpp/evshim/evshim.c'
+    evshim_src = evshim_file.read_text(encoding='utf-8')
+    evshim_src = patch_once(
+        evshim_src,
+        'base = "/data/data/app.gamenative/files";',
+        f'base = "/data/data/{app_id}/files";',
+        'fix native evshim fallback for standalone app',
+    )
+
     gradle_src = gradle.read_text(encoding='utf-8')
     gradle_src = patch_once(gradle_src,
         'applicationId = "app.gamenative"',
@@ -135,6 +202,11 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         gradle: gradle_src,
         strings: strings_src,
         bootstrap: (ROOT / 'DragonwildsBootstrap.kt').read_text(encoding='utf-8'),
+        bionic_file: bionic_src,
+        wine_file: wine_src,
+        dxvk_file: dxvk_src,
+        container_file: container_src,
+        evshim_file: evshim_src,
         ui_file: ui_src,
         marker_file: marker_src,
         prereq_file: prereq_src,
