@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -21,6 +22,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import app.gamenative.service.SteamService
+import app.gamenative.PrefManager
 import app.gamenative.utils.ContainerUtils
 import app.gamenative.utils.SteamUtils
 import kotlinx.coroutines.Dispatchers
@@ -70,6 +73,7 @@ internal fun DragonwildsHome(
     var currentFile by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var autoLaunched by rememberSaveable { mutableStateOf(false) }
+    var cellularAllowed by remember { mutableStateOf(!PrefManager.downloadOnWifiOnly) }
 
     val holdAutomaticLaunch = remember(context) {
         DragonwildsDiagnostics.shouldHoldAutoLaunch(context)
@@ -282,6 +286,26 @@ internal fun DragonwildsHome(
             }
             if (!installed) {
                 Text("Play is available after the game folder is imported.",
+                    style = MaterialTheme.typography.bodySmall)
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically) {
+                Text("Allow 5G/mobile-data downloads")
+                Switch(
+                    checked = cellularAllowed,
+                    onCheckedChange = { allowed ->
+                        cellularAllowed = allowed
+                        PrefManager.downloadOnWifiOnly = !allowed
+                    },
+                )
+            }
+            if (cellularAllowed) {
+                Text("Steam downloads may use your mobile data. Game files already imported are reused.",
+                    style = MaterialTheme.typography.bodySmall)
+            } else {
+                Text("Steam downloads are limited to Wi-Fi/LAN.",
                     style = MaterialTheme.typography.bodySmall)
             }
 
