@@ -10,6 +10,7 @@ import com.winlator.container.Container
 import com.winlator.core.envvars.EnvVars
 import com.winlator.core.KeyValueSet
 import com.winlator.fexcore.FEXCorePreset
+import java.io.File
 
 /**
  * Applies the supplied phone's working defaults to NEW game containers.
@@ -133,6 +134,49 @@ object DragonwildsBootstrap {
         } catch (_: Exception) {
             // Retry on next app launch if a container is not yet ready.
         }
+    }
+
+    /**
+     * The game folder can be correctly imported while a new Steam container is
+     * still missing executable or real-Steam settings. GameNative otherwise
+     * displays "The executable could not be auto-selected".
+     *
+     * Call after creating the container and applying upstream game fixes,
+     * before the first launch-executable validation. Never reimport files.
+     */
+    fun ensureSteamGameLaunchConfig(container: Container) {
+        if (container.id != GAME_ID) return
+        var changed = false
+        if (!container.isLaunchRealSteam) {
+            container.isLaunchRealSteam = true
+            changed = true
+        }
+        if (container.isLaunchBionicSteam) {
+            container.isLaunchBionicSteam = false
+            changed = true
+        }
+        if (container.steamType != Container.STEAM_TYPE_HEADLESS) {
+            container.steamType = Container.STEAM_TYPE_HEADLESS
+            changed = true
+        }
+        if (container.executablePath.isBlank()) {
+            // Prefer Steam's launcher stub, then the UE shipping binary.
+            // The paths are relative to the imported game's own root.
+            val gameRoot = File(SteamService.getAppDirPath(1374490))
+            val chosen = listOf(
+                "RSDragonwilds.exe",
+                "RSDragonwilds/Binaries/Win64/RSDragonwilds-Win64-Shipping.exe",
+            ).firstOrNull { File(gameRoot, it).isFile }
+            if (chosen != null) {
+                container.executablePath = chosen
+                changed = true
+            }
+        }
+        if (container.execArgs.isBlank()) {
+            container.execArgs = "-dx11"
+            changed = true
+        }
+        if (changed) container.saveData()
     }
 
     /**
