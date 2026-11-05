@@ -136,10 +136,17 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
     )
     bionic_src = patch_once(
         bionic_src,
-        '        Context context = environment.getContext();\n        ImageFs imageFs = ImageFs.find(context);\n',
+        '        Context context = environment.getContext();\n'
+        '        ImageFs imageFs = ImageFs.find(context);\n'
+        '        File rootDir = imageFs.getRootDir();\n'
+        '        \n'
+        '        PrefManager.init(context);\n',
         '        Context context = environment.getContext();\n'
         '        envVars.put("EVSHIM_BASE_PATH", context.getFilesDir().getAbsolutePath());\n'
-        '        ImageFs imageFs = ImageFs.find(context);\n',
+        '        ImageFs imageFs = ImageFs.find(context);\n'
+        '        File rootDir = imageFs.getRootDir();\n'
+        '        \n'
+        '        PrefManager.init(context);\n',
         'set SDL evshim private shared-memory root',
     )
 
