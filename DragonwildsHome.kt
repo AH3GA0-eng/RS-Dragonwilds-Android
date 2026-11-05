@@ -3,7 +3,6 @@ package app.gamenative.ui
 import android.content.Context
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.widget.Toast
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -198,7 +197,6 @@ internal fun DragonwildsHome(
                     onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.setPrimaryClip(ClipData.newPlainText("Dragonwilds launch status", previousLaunchReport))
-                        Toast.makeText(context, "Launch status copied", Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
