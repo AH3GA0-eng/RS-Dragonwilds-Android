@@ -98,6 +98,25 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         'only mark bundled EOS install on success',
     )
 
+    # Reconcile the imported Steam app's container at launch time. The upstream
+    # Steam game best-config application may overwrite the initial defaults;
+    # explicitly restore our Steam/headless and known executable settings just
+    # before the pre-launch executable validation.
+    launch_anchor = (
+        '        val gameSource = ContainerUtils.extractGameSourceFromContainerId(appId)\n'
+        '        val isLocalSavesOnly = ContainerUtils.isLocalSavesOnly(context, appId)\n'
+    )
+    launch_injection = (
+        '        if (appId == app.gamenative.DragonwildsBootstrap.GAME_ID && !bootToContainer) {\n'
+        '            app.gamenative.DragonwildsBootstrap.ensureSteamGameLaunchConfig(container)\n'
+        '        }\n'
+    )
+    ui_src = patch_once(
+        ui_src, launch_anchor,
+        launch_injection + launch_anchor,
+        'repair Dragonwilds Steam launch configuration before executable validation',
+    )
+
     gradle_src = gradle.read_text(encoding='utf-8')
     gradle_src = patch_once(gradle_src,
         'applicationId = "app.gamenative"',
