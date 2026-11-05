@@ -47,13 +47,15 @@ jobs:
 
       - name: Apply Dragonwilds modifications
         run: python3 apply_fork.py GameNative
-     
+           
       - name: Build ARM64 Android APK
         working-directory: GameNative
         run: |
           printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          find app/src/main/res -type f -name '*.dw-original' -print -delete
           chmod +x gradlew
           ./gradlew :app:assembleModernDebug --stacktrace --no-daemon --max-workers=2
+
 
 
       - name: Upload APK
