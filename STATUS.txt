@@ -1,0 +1,6 @@
+Source overlay patch tests: PASS (5 unit tests)
+Kit archive integrity: verified at packaging time
+Upstream full Android compilation: NOT RUN here (SDK/network unavailable)
+Phone launch / Steam login / multiplayer: NOT TESTED
+Automatic game launch from app icon: NOT IMPLEMENTED (requires next-stage integration)
+Safe to uninstall GameNative? NO

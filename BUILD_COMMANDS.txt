@@ -1,0 +1,16 @@
+Local Linux/Windows build with Android SDK 36, NDK 27.3.13750724 and Java 17:
+
+  git clone --recursive https://github.com/utkarshdalal/GameNative.git
+  python3 apply_fork.py GameNative --dry-run
+  python3 apply_fork.py GameNative
+  cd GameNative
+  ./gradlew :app:assembleModernDebug
+
+GitHub Actions from your phone:
+
+  1. Upload this kit's CONTENTS into a private GitHub repo.
+  2. Preserve .github/workflows/build-dragonwilds.yml and tests/ paths.
+  3. Open Actions > Dragonwilds Mobile independent APK > Run workflow.
+  4. Get the untested APK from workflow artifacts after successful compile.
+
+Result is not yet a proven game-ready standalone APK. Do not uninstall GameNative.

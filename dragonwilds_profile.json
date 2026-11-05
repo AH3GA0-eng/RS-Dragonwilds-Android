@@ -1,0 +1,112 @@
+{
+  "game": {
+    "title": "RuneScape: Dragonwilds",
+    "steam_app_id": 1374490,
+    "container_id": "STEAM_1374490",
+    "source": "STEAM"
+  },
+  "general": {
+    "containerVariant": "bionic",
+    "wineVersion": "proton-11.0-1-arm64ec-1",
+    "execArgs": "-dx11",
+    "screenSize": "854x480",
+    "language": "english",
+    "audioDriver": "pulseaudio",
+    "pulseaudioLowLatency": false,
+    "micEnabled": false,
+    "portraitMode": false,
+    "forceDlc": false,
+    "loadMods": false,
+    "useLegacyDRM": false,
+    "unpackFiles": false,
+    "steamOfflineMode": false,
+    "epicOfflineMode": false,
+    "launchRealSteam": true,
+    "steamType": "headless",
+    "launchBionicSteam": false,
+    "disableLibredirect": false,
+    "fasterExternalLoading": false,
+    "suspendPolicy": "manual"
+  },
+  "graphics": {
+    "graphicsDriver": "Wrapper-v2",
+    "graphicsDriverVersion": "Turnip Adreno Driver T26 (@Mr_Purple_666)",
+    "displayServer": "x11",
+    "displayRenderer": "vulkan",
+    "dxwrapper": "dxvk",
+    "dxwrapperVersion": "2.7.1",
+    "rendererPresentMode": "fifo",
+    "useDRI3": true,
+    "presentMode": "mailbox",
+    "bcnEmulation": "auto",
+    "bcnEmulationType": "compute",
+    "sharpnessEffect": "None",
+    "frameGeneration": false
+  },
+  "emulation": {
+    "fexcoreVersion": "2601",
+    "box64Version": "0.4.2",
+    "fexcorePreset": "Compatibility",
+    "box64Preset": "Compatibility"
+  },
+  "controller": {
+    "sdlControllerAPI": true,
+    "useSteamInput": false,
+    "enableXInput": true,
+    "enableDInput": true,
+    "dinputMapperType": "Standard",
+    "vibrationIntensity": 100,
+    "externalDisplayMode": "off",
+    "externalDisplaySwap": false
+  },
+  "wine": {
+    "gpuName": "NVIDIA GeForce GTX 480",
+    "offScreenRenderingMode": "fbo",
+    "videoMemorySize": "2048",
+    "csmt": true,
+    "strictShaderMath": true,
+    "mouseWarpOverride": "disable"
+  },
+  "windows_components": {
+    "Direct3D": "native",
+    "DirectSound": "native",
+    "DirectInput8": "builtin",
+    "DirectInput": "builtin",
+    "DirectMusic": "builtin",
+    "DirectShow": "builtin",
+    "DirectPlay": "builtin",
+    "VisualC++2010": "native",
+    "WindowsMediaDecoder": "native",
+    "OpenGL": "builtin"
+  },
+  "environment": {
+    "WRAPPER_MAX_IMAGE_COUNT": "0",
+    "ZINK_DESCRIPTORS": "lazy",
+    "ZINK_DEBUG": "compact",
+    "MESA_SHADER_CACHE_DISABLE": "0",
+    "MESA_SHADER_CACHE_MAX_SIZE": "512MB",
+    "mesa_glthread": "true",
+    "WINEESYNC": "true",
+    "MESA_VK_WSI_PRESENT_MODE": "mailbox",
+    "TU_DEBUG": "noconform",
+    "PULSE_LATENCY_MSEC": "144",
+    "GALLIUM_HUD": "fps"
+  },
+  "advanced": {
+    "startupSelection": "essential",
+    "cpuList": "0,1,2,3,4,5,6,7",
+    "cpuList32": "4,5,6,7"
+  },
+  "migration": {
+    "originalPrivateAppId": "app.gamenative",
+    "reuseOldPrivatePaths": false,
+    "gameFilesIncluded": false,
+    "steamCredentialsIncluded": false
+  },
+  "notes": [
+    "Only values visible in provided screenshots have been recorded.",
+    "The absolute A: drive path shown points inside GameNative private storage and must not be reused unchanged in a different application ID.",
+    "Environment values are screenshot transcriptions; installer merges them into the upstream defaults.",
+    "Steam must be authenticated normally; no Steam DRM or login bypass is implemented."
+  ]
+}
