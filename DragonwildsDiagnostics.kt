@@ -3,45 +3,96 @@ package app.gamenative.ui
 import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
+import app.gamenative.utils.ContainerUtils
 import com.winlator.xenvironment.ImageFs
 import java.io.File
 import java.text.DateFormat
 import java.util.Date
 
-/** Minimal, local-only diagnostics for the dedicated Dragonwilds launcher.
- * No Steam credentials, usernames, file lists, or full logcat are collected.
+/**
+ * Minimal local-only Dragonwilds launch telemetry; no login credentials,
+ * file inventories, Steam tokens or full logcat are collected.
+ *
+ * Most short game sessions finish via Wine's guest termination callback,
+ * which does NOT register as an Android process crash.
  */
 internal object DragonwildsDiagnostics {
     private const val PREFS = "dragonwilds_mobile_launch_diagnostics"
     private const val LAST_LAUNCH_MS = "last_launch_ms"
     private const val WINDOW_MS = 10L * 60L * 1000L
+    private const val GAME_ID = "STEAM_1374490"
+
+    private fun prefs(context: Context) =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     fun recordLaunch(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putLong(LAST_LAUNCH_MS, System.currentTimeMillis()).apply()
+        prefs(context).edit()
+            .putLong(LAST_LAUNCH_MS, System.currentTimeMillis())
+            .remove("guest_exit_code")
+            .remove("session_event")
+            .remove("launch_error")
+            .remove("last_steam_stage")
+            .putString("steam_watcher", "not started")
+            .commit()
+    }
+
+    fun recordSteamWatcherStart(context: Context) {
+        prefs(context).edit().putString("steam_watcher", "started").apply()
+    }
+
+    fun recordSteamStage(context: Context, status: String) {
+        val first = status.trim().substringBefore(' ').lowercase()
+        if (first !in setOf("starting", "logon", "connecting", "retry", "launching", "launched", "failed")) return
+        prefs(context).edit().putString("last_steam_stage", first).apply()
+    }
+
+    fun recordGuestExit(context: Context, appId: String, status: Int) {
+        if (appId != GAME_ID) return
+        prefs(context).edit()
+            .putInt("guest_exit_code", status)
+            .putString("session_event", "Wine guest launcher exited")
+            .commit()
+    }
+
+    fun recordSessionEnded(context: Context, appId: String, reason: String) {
+        if (appId != GAME_ID) return
+        val clean = reason.take(48).filter { it.isLetterOrDigit() || it == '_' || it == '-' }
+        prefs(context).edit().putString("session_event", "Game screen closed: " + clean).apply()
+    }
+
+    fun recordLaunchError(context: Context, error: String) {
+        val clean = error.take(220).replace(Regex("[\\r\\n\\t]"), " ")
+        prefs(context).edit().putString("launch_error", clean).commit()
     }
 
     private fun lastLaunchMs(context: Context): Long =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(LAST_LAUNCH_MS, 0L)
+        prefs(context).getLong(LAST_LAUNCH_MS, 0L)
 
-    // A recently attempted run must not launch again immediately on app restart
-    // until the user sees the failure and presses Play. Avoid crash-restart loops.
     fun shouldHoldAutoLaunch(context: Context): Boolean {
         val last = lastLaunchMs(context)
-        return last > 0 && (System.currentTimeMillis() - last) in 0..WINDOW_MS
+        return last > 0L && (System.currentTimeMillis() - last) in 0L..WINDOW_MS
     }
 
+    // Steamhost may write its status into either the imagefs Wine prefix or
+    // the per-game Wine prefix, depending on the container and overlay mode.
     private fun steamhostStage(context: Context): String? {
-        val path = runCatching {
-            File(ImageFs.find(context).wineprefix,
-                "drive_c/Program Files (x86)/Steam/steamhost_status")
-        }.getOrNull() ?: return null
-        val stage = runCatching { path.readText().trim().substringBefore(' ') }
-            .getOrNull()?.lowercase().orEmpty()
-        return stage.takeIf {
-            it in setOf("starting", "logon", "connecting", "retry",
-                "launching", "launched", "failed")
+        val candidates = mutableListOf<File>()
+        runCatching {
+            val container = ContainerUtils.getContainer(context, GAME_ID)
+            candidates.add(File(container.rootDir,
+                ".wine/drive_c/Program Files (x86)/Steam/steamhost_status"))
         }
+        runCatching {
+            candidates.add(File(ImageFs.find(context).wineprefix,
+                "drive_c/Program Files (x86)/Steam/steamhost_status"))
+        }
+        for (candidate in candidates) {
+            val stage = runCatching { candidate.readText().trim().substringBefore(' ').lowercase() }
+                .getOrNull() ?: continue
+            if (stage in setOf("starting", "logon", "connecting", "retry",
+                    "launching", "launched", "failed")) return stage
+        }
+        return null
     }
 
     private fun androidExit(context: Context, since: Long): String {
@@ -50,9 +101,9 @@ internal object DragonwildsDiagnostics {
         }
         return runCatching {
             val am = context.getSystemService(ActivityManager::class.java)
-            val history = am.getHistoricalProcessExitReasons(context.packageName, 0, 8)
-            val exit = history.firstOrNull { it.timestamp >= since - 3000L }
-            if (exit == null) return@runCatching "No recorded Android process exit"
+            val exits = am.getHistoricalProcessExitReasons(context.packageName, 0, 8)
+            val exit = exits.firstOrNull { it.timestamp >= since - 3000L }
+                ?: return@runCatching "No recorded Android process exit"
             when (exit.reason) {
                 android.app.ApplicationExitInfo.REASON_CRASH -> "Android: Java crash"
                 android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "Android: native crash"
@@ -68,12 +119,24 @@ internal object DragonwildsDiagnostics {
     fun report(context: Context): String? {
         val last = lastLaunchMs(context)
         if (last <= 0L) return null
+        val p = prefs(context)
         val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM)
             .format(Date(last))
-        val stage = steamhostStage(context) ?: "No Steam stage recorded"
-        return "Dragonwilds Mobile launch diagnostic\n" +
-            "Attempt: " + time + "\n" +
-            "Steam stage: " + stage + "\n" +
-            androidExit(context, last)
+        val stage = p.getString("last_steam_stage", null) ?: steamhostStage(context)
+            ?: "No Steam stage emitted"
+        val watcher = p.getString("steam_watcher", "not started") ?: "unknown"
+        val session = p.getString("session_event", "No Wine guest exit callback recorded")
+        val code = if (p.contains("guest_exit_code")) p.getInt("guest_exit_code", -1).toString() else "not recorded"
+        val error = p.getString("launch_error", null)
+        return buildString {
+            appendLine("Dragonwilds Mobile launch diagnostic")
+            appendLine("Attempt: " + time)
+            appendLine("Steam watcher: " + watcher)
+            appendLine("Steam stage: " + stage)
+            appendLine("Guest exit code: " + code)
+            appendLine("Game session: " + session)
+            if (!error.isNullOrBlank()) appendLine("Launch error: " + error)
+            append(androidExit(context, last))
+        }
     }
 }
