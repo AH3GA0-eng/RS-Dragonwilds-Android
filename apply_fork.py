@@ -253,6 +253,44 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         f'applicationId = "{app_id}"',
         'independent package name')
 
+    # Fixed signing identity. The actual keystore/password live only in a
+    # GitHub Actions repository secret or a private local build environment.
+    # PR builds still compile using a temporary debug key, but are NOT
+    # distributed by our workflow; only manually triggered signed builds
+    # are allowed as installable artifacts.
+    gradle_src = patch_once(
+        gradle_src,
+        '    signingConfigs {\n        create("pluvia") {\n',
+        '    signingConfigs {\n'
+        '        create("dragonwildsStable") {\n'
+        '            val password = System.getenv("DRAGONWILDS_SIGNING_PASSWORD")\n'
+        '            if (!password.isNullOrBlank()) {\n'
+        '                storeFile = rootProject.file("dragonwilds-signing.p12")\n'
+        '                storePassword = password\n'
+        '                keyAlias = "dragonwilds-mobile"\n'
+        '                keyPassword = password\n'
+        '            }\n'
+        '        }\n'
+        '        create("pluvia") {\n',
+        'define stable private APK signing config',
+    )
+    gradle_src = patch_once(
+        gradle_src,
+        '            signingConfig = signingConfigs.getByName("debug")\n',
+        '            signingConfig = signingConfigs.getByName(\n'
+        '                if (System.getenv("DRAGONWILDS_SIGNING_PASSWORD").isNullOrBlank()) "debug"\n'
+        '                else "dragonwildsStable"\n'
+        '            )\n',
+        'use stable signing config for modern debug builds',
+    )
+    # Monotonic version codes to allow Android to perform ordinary updates.
+    gradle_src = patch_once(
+        gradle_src,
+        '        versionCode = 24\n',
+        '        versionCode = 10000 + (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 15)\n',
+        'increment APK version codes',
+    )
+
     strings_src = strings.read_text(encoding='utf-8')
     matches = list(re.finditer(r'<string\s+name="app_name">.*?</string>', strings_src, re.DOTALL))
     if len(matches) != 1:
