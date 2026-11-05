@@ -1,6 +1,9 @@
 package app.gamenative.ui
 
 import android.content.Context
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.widget.Toast
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -10,6 +13,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -66,6 +71,18 @@ internal fun DragonwildsHome(
     var currentFile by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var autoLaunched by rememberSaveable { mutableStateOf(false) }
+
+    val holdAutomaticLaunch = remember(context) {
+        DragonwildsDiagnostics.shouldHoldAutoLaunch(context)
+    }
+    val previousLaunchReport = remember(context) {
+        if (holdAutomaticLaunch) DragonwildsDiagnostics.report(context) else null
+    }
+
+    fun startDragonwilds() {
+        DragonwildsDiagnostics.recordLaunch(context)
+        onLaunch()
+    }
     var resolutionMenu by remember { mutableStateOf(false) }
     var resolution by remember {
         mutableStateOf(prefs.getString("resolution", "854x480") ?: "854x480")
@@ -145,9 +162,9 @@ internal fun DragonwildsHome(
     // This route is never the generic GameNative library. Enter the real Steam
     // preLaunchApp pipeline only after a registered installation is available.
     LaunchedEffect(signedIn, installed, importing) {
-        if (signedIn && installed && !importing && !autoLaunched) {
+        if (signedIn && installed && !importing && !autoLaunched && !holdAutomaticLaunch) {
             autoLaunched = true
-            onLaunch()
+            startDragonwilds()
         }
     }
 
@@ -167,11 +184,27 @@ internal fun DragonwildsHome(
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(15.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text("RuneScape: Dragonwilds", style = MaterialTheme.typography.headlineMedium)
+
+            if (previousLaunchReport != null) {
+                Text("Previous session returned unexpectedly", color = MaterialTheme.colorScheme.error)
+                Text("Automatic retry is paused. Your imported game files are preserved.",
+                    style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Dragonwilds launch status", previousLaunchReport))
+                        Toast.makeText(context, "Launch status copied", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Copy last launch status")
+                }
+            }
 
             if (!checked) {
                 CircularProgressIndicator()
@@ -237,7 +270,7 @@ internal fun DragonwildsHome(
 
             Button(
                 onClick = {
-                    if (signedIn) onLaunch() else onSignIn()
+                    if (signedIn) startDragonwilds() else onSignIn()
                 },
                 enabled = installed && !importing,
                 modifier = Modifier.fillMaxWidth(),
