@@ -1,4 +1,3 @@
-
 name: Dragonwilds Mobile APK
 
 on:
@@ -13,7 +12,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 90
-
     steps:
       - name: Checkout build kit
         uses: actions/checkout@v4
@@ -30,8 +28,8 @@ jobs:
           fi
 
       - name: Download GameNative source
-        run: |
-          git clone --depth 1 https://github.com/utkarshdalal/GameNative.git GameNative
+        run: git clone --depth 1 https://github.com/utkarshdalal/GameNative.git GameNative
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -40,6 +38,7 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
+
       - name: Install Android dependencies
         run: |
           sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.3.13750724' 'platform-tools'
@@ -52,17 +51,30 @@ jobs:
 
       - name: Apply Dragonwilds modifications
         run: python3 apply_fork.py GameNative
-           
-      # Only a manual build may become an installable APK. A repository secret
-      # contains two lines: PKCS12 password and base64-encoded PKCS12 file.
-      # No signing key is committed or sent to GitHub Actions on PR builds.
+
+      # Only manual builds produce installable APKs with a permanent identity.
+      # One private secret contains a password:base64(PKCS12) bundle.
       - name: Prepare permanent Android signing key
         if: github.event_name == 'workflow_dispatch'
         env:
           SIGNING_BUNDLE: ${{ secrets.DRAGONWILDS_SIGNING_BUNDLE }}
         run: |
           set -euo pipefail
-          if [[ -z "${SIGNING_BUNDLE:-}" || "$SIGNING_BUNDLE" != *          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          if [[ -z "${SIGNING_BUNDLE:-}" || "$SIGNING_BUNDLE" != *:* ]]; then
+            echo "::error::Set the DRAGONWILDS_SIGNING_BUNDLE Actions repository secret before publishing an APK."
+            exit 1
+          fi
+          password="${SIGNING_BUNDLE%%:*}"
+          key_b64="${SIGNING_BUNDLE#*:}"
+          printf '%s' "$key_b64" | tr -d '\r\n' | base64 --decode > GameNative/dragonwilds-signing.p12
+          printf '%s' "$password" > GameNative/.dragonwilds-signing-password
+          chmod 600 GameNative/dragonwilds-signing.p12 GameNative/.dragonwilds-signing-password
+          keytool -list -storetype PKCS12 -keystore GameNative/dragonwilds-signing.p12 -storepass "$password" -alias dragonwilds-mobile >/dev/null
+
+      - name: Build ARM64 Android APK
+        working-directory: GameNative
+        run: |
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
           find app/src/main/res -type f -name '*.dw-original' -print -delete
           chmod +x gradlew
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
@@ -77,17 +89,14 @@ jobs:
           set -euo pipefail
           mapfile -t apks < <(find app/build/outputs/apk/modern/debug -name '*.apk' -type f)
           if [[ ${#apks[@]} -ne 1 ]]; then
-            echo "::error::Expected exactly one signed APK."
+            echo "::error::Expected exactly one APK."
             exit 1
           fi
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "${apks[0]}" |
             grep -q 'Signer #1 certificate DN: CN=Dragonwilds Mobile'
           rm -f dragonwilds-signing.p12 .dragonwilds-signing-password
 
-
-
-
-      - name: Upload APK
+      - name: Upload stable-signed APK
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
@@ -95,63 +104,3 @@ jobs:
           path: GameNative/app/build/outputs/apk/modern/debug/*.apk
           if-no-files-found: error
           retention-days: 14
-          
-\\n'* ]]; then
-            echo "::error::Set DRAGONWILDS_SIGNING_BUNDLE in repository Actions secrets before creating an installable APK."
-            exit 1
-          fi
-          password="${SIGNING_BUNDLE%%          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
-          find app/src/main/res -type f -name '*.dw-original' -print -delete
-          chmod +x gradlew
-          ./gradlew :app:assembleModernDebug --stacktrace --no-daemon --max-workers=2
-
-
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Dragonwilds-Mobile-APK-UNTESTED
-          path: GameNative/app/build/outputs/apk/modern/debug/*.apk
-          if-no-files-found: error
-          retention-days: 14
-          
-\\n'*}"
-          key_b64="${SIGNING_BUNDLE#*          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
-          find app/src/main/res -type f -name '*.dw-original' -print -delete
-          chmod +x gradlew
-          ./gradlew :app:assembleModernDebug --stacktrace --no-daemon --max-workers=2
-
-
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Dragonwilds-Mobile-APK-UNTESTED
-          path: GameNative/app/build/outputs/apk/modern/debug/*.apk
-          if-no-files-found: error
-          retention-days: 14
-          
-\\n'}"
-          printf '%s' "$key_b64" | tr -d '\\r\\n' | base64 --decode > GameNative/dragonwilds-signing.p12
-          printf '%s' "$password" > GameNative/.dragonwilds-signing-password
-          chmod 600 GameNative/dragonwilds-signing.p12 GameNative/.dragonwilds-signing-password
-          keytool -list -storetype PKCS12 -keystore GameNative/dragonwilds-signing.p12 -storepass "$password" -alias dragonwilds-mobile >/dev/null
-
-      - name: Build ARM64 Android APK
-        working-directory: GameNative
-        run: |
-          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
-          find app/src/main/res -type f -name '*.dw-original' -print -delete
-          chmod +x gradlew
-          ./gradlew :app:assembleModernDebug --stacktrace --no-daemon --max-workers=2
-
-
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Dragonwilds-Mobile-APK-UNTESTED
-          path: GameNative/app/build/outputs/apk/modern/debug/*.apk
-          if-no-files-found: error
-          retention-days: 14
-          
