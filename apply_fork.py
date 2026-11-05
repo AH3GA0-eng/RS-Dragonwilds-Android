@@ -108,7 +108,7 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
     )
     launch_injection = (
         '        if (appId == app.gamenative.DragonwildsBootstrap.GAME_ID && !bootToContainer) {\n'
-        '            app.gamenative.DragonwildsBootstrap.ensureSteamGameLaunchConfig(container)\n'
+        '            app.gamenative.DragonwildsBootstrap.ensureSteamGameLaunchConfig(context, container)\n'
         '        }\n'
     )
     ui_src = patch_once(
