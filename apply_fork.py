@@ -50,18 +50,18 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
     # HomeScreen with a dedicated Dragonwilds-only setup/start screen.
     ui_file = repo / 'app/src/main/java/app/gamenative/ui/PluviaMain.kt'
     ui_src = ui_file.read_text(encoding='utf-8')
-    home_start = '                    HomeScreen(\\n'
-    home_end = '                        isSteamConnected = state.isSteamConnected,\\n                    )\\n'
+    home_start = '                    HomeScreen(\n'
+    home_end = '                        isSteamConnected = state.isSteamConnected,\n                    )\n'
     if ui_src.count(home_start) != 1 or ui_src.count(home_end) != 1:
         raise ValueError('GameNative HomeScreen changed; refuse unsafe UI replacement')
     begin = ui_src.index(home_start)
     finish = ui_src.index(home_end, begin) + len(home_end)
     ui_src = ui_src[:begin] + (
-        '                    DragonwildsHome(\\n'
-        '                        onLaunch = { launchIntentApp("STEAM_1374490", false, null) },\\n'
-        '                        onSignIn = { navController.navigate(PluviaScreen.LoginUser.route) },\\n'
-        '                        onAdvancedSettings = { navController.navigate(PluviaScreen.Settings.route) },\\n'
-        '                    )\\n'
+        '                    DragonwildsHome(\n'
+        '                        onLaunch = { launchIntentApp("STEAM_1374490", false, null) },\n'
+        '                        onSignIn = { navController.navigate(PluviaScreen.LoginUser.route) },\n'
+        '                        onAdvancedSettings = { navController.navigate(PluviaScreen.Settings.route) },\n'
+        '                    )\n'
     ) + ui_src[finish:]
 
     gradle_src = gradle.read_text(encoding='utf-8')
