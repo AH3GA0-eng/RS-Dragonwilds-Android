@@ -213,6 +213,7 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         xserver_file: xserver_src,
         repo / 'app/src/main/java/app/gamenative/utils/preInstallSteps/DragonwildsEosStep.kt': (ROOT / 'DragonwildsEosStep.kt').read_text(encoding='utf-8'),
         repo / 'app/src/main/java/app/gamenative/ui/DragonwildsHome.kt': (ROOT / 'DragonwildsHome.kt').read_text(encoding='utf-8'),
+        repo / 'app/src/main/java/app/gamenative/ui/DragonwildsDiagnostics.kt': (ROOT / 'DragonwildsDiagnostics.kt').read_text(encoding='utf-8'),
         repo / 'app/src/main/java/app/gamenative/ui/DragonwildsImport.kt': (ROOT / 'DragonwildsImport.kt').read_text(encoding='utf-8'),
     }
 
