@@ -53,6 +53,25 @@ jobs:
       - name: Apply Dragonwilds modifications
         run: python3 apply_fork.py GameNative
            
+      # An Android update must be signed by exactly the same private key
+      # as the installed APK. GitHub-hosted runners generate a NEW random debug
+      # key each job unless this key is restored from a repository secret.
+      # Never fall back to ephemeral signing and publish a non-upgradable APK.
+      - name: Restore persistent Android signing key
+        env:
+          DRAGONWILDS_DEBUG_KEYSTORE_B64: ${{ secrets.DRAGONWILDS_DEBUG_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$DRAGONWILDS_DEBUG_KEYSTORE_B64" ]; then
+            echo "::error::Missing DRAGONWILDS_DEBUG_KEYSTORE_B64 repository secret. Refusing to create a non-upgradable test APK."
+            exit 1
+          fi
+          mkdir -p "$HOME/.android"
+          chmod 700 "$HOME/.android"
+          printf '%s' "$DRAGONWILDS_DEBUG_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey >/dev/null
+          echo "Persistent Android signing key validated"
+
       - name: Build ARM64 Android APK
         working-directory: GameNative
         run: |
