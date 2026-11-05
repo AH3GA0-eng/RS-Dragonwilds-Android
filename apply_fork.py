@@ -276,7 +276,15 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
     )
     gradle_src = patch_once(
         gradle_src,
+        '        debug {\n'
+        '            isDebuggable = true\n'
+        '            isMinifyEnabled = false\n'
+        '            isShrinkResources = false\n'
         '            signingConfig = signingConfigs.getByName("debug")\n',
+        '        debug {\n'
+        '            isDebuggable = true\n'
+        '            isMinifyEnabled = false\n'
+        '            isShrinkResources = false\n'
         '            signingConfig = signingConfigs.getByName(\n'
         '                if (System.getenv("DRAGONWILDS_SIGNING_PASSWORD").isNullOrBlank()) "debug"\n'
         '                else "dragonwildsStable"\n'
