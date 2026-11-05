@@ -48,9 +48,9 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
     # Only installed games are queued. GameNative's existing Steam-aware launch
     # pipeline handles authentication and the actual container startup.
     main = patch_once(main,
-        '        handleLaunchIntent(intent)\\n',
-        '        handleLaunchIntent(intent)\\n' +
-        '        DragonwildsBootstrap.queueAutoLaunchIfInstalled(applicationContext, intent, savedInstanceState != null)\\n',
+        '        handleLaunchIntent(intent)\n',
+        '        handleLaunchIntent(intent)\n' +
+        '        DragonwildsBootstrap.queueAutoLaunchIfInstalled(applicationContext, intent, savedInstanceState != null)\n',
         'auto launch installed Dragonwilds')
 
     gradle_src = gradle.read_text(encoding='utf-8')
