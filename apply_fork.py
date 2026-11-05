@@ -247,6 +247,13 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         'fix native evshim fallback for standalone app',
     )
 
+    # No upstream GameNative branding on the game splash in this single-game app.
+    splash_file = repo / 'app/src/main/java/app/gamenative/ui/components/BootingSplash.kt'
+    splash_src = splash_file.read_text(encoding='utf-8')
+    if splash_src.count('text = "GameNative"') != 2:
+        raise ValueError('Expected two upstream splash logo texts; abort unsafe change')
+    splash_src = splash_src.replace('text = "GameNative"', 'text = "Dragonwilds"', 2)
+
     # GameNative's upstream default is Wi-Fi-only downloads, including Steam.
     # On this dedicated Dragonwilds fork, enable cellular by default and
     # migrate any saved Wi-Fi-only value from previous APKs exactly once.
@@ -358,6 +365,7 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         strings: strings_src,
         bootstrap: (ROOT / 'DragonwildsBootstrap.kt').read_text(encoding='utf-8'),
         pref_file: pref_src,
+        splash_file: splash_src,
         eye_icon: (ROOT / 'dragonwilds_eye.xml').read_text(encoding='utf-8'),
         eye_adaptive: (ROOT / 'ic_dragonwilds.xml').read_text(encoding='utf-8'),
         bionic_file: bionic_src,
