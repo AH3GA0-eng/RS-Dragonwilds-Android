@@ -25,8 +25,21 @@ internal object DragonwildsDiagnostics {
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    private fun memorySummary(context: Context): String = runCatching {
+        val service = context.getSystemService(ActivityManager::class.java)
+        val info = ActivityManager.MemoryInfo()
+        service.getMemoryInfo(info)
+        "free=${info.availMem / 1048576L}MB; lowMemory=${info.lowMemory}; threshold=${info.threshold / 1048576L}MB"
+    }.getOrDefault("unavailable")
+
     fun recordLaunch(context: Context) {
         prefs(context).edit()
+            .putString("memory_at_start", memorySummary(context))
+            .remove("memory_at_exit")
+            .remove("bionic_launch_count")
+            .remove("bionic_kill_time")
+            .remove("bionic_kill_pid")
+            .remove("bionic_kill_reason")
             .putLong(LAST_LAUNCH_MS, System.currentTimeMillis())
             .remove("guest_exit_code")
             .remove("session_event")
@@ -50,6 +63,8 @@ internal object DragonwildsDiagnostics {
         if (appId != GAME_ID) return
         prefs(context).edit()
             .putInt("guest_exit_code", status)
+            .putLong("guest_exit_time", System.currentTimeMillis())
+            .putString("memory_at_exit", memorySummary(context))
             .putString("session_event", "Wine guest launcher exited")
             .commit()
     }
@@ -135,6 +150,15 @@ internal object DragonwildsDiagnostics {
             appendLine("Steam stage: " + stage)
             appendLine("Guest exit code: " + code)
             appendLine("Game session: " + session)
+            appendLine("Available memory at launch: " + (p.getString("memory_at_start", "not sampled") ?: "not sampled"))
+            appendLine("Available memory at exit: " + (p.getString("memory_at_exit", "not sampled") ?: "not sampled"))
+            appendLine("Native launcher start count: " + p.getInt("bionic_launch_count", 0))
+            if (p.contains("bionic_kill_time")) {
+                val killTime = p.getLong("bionic_kill_time", 0L)
+                val exitTime = p.getLong("guest_exit_time", 0L)
+                appendLine("Native launcher requested SIGKILL: " + (p.getString("bionic_kill_reason", "unknown") ?: "unknown"))
+                appendLine("Internal kill relative to guest exit: " + if (exitTime > 0) (killTime - exitTime).toString() + " ms" else "no guest exit")
+            } else appendLine("Native launcher SIGKILL recorded: no")
             if (!error.isNullOrBlank()) appendLine("Launch error: " + error)
             append(androidExit(context, last))
         }
