@@ -18,7 +18,7 @@ object DragonwildsBootstrap {
 
     fun installFirstRunDefaults(context: Context) {
         val prefs = context.getSharedPreferences("dragonwilds_mobile_defaults", Context.MODE_PRIVATE)
-        if (prefs.getBoolean("defaults_v3_applied", false)) return
+        if (prefs.getBoolean("defaults_v4_applied", false)) return
 
         val original = ContainerUtils.getDefaultContainerData()
         val env = EnvVars(original.envVars)
@@ -26,13 +26,14 @@ object DragonwildsBootstrap {
         env.put("ZINK_DESCRIPTORS", "lazy")
         env.put("ZINK_DEBUG", "compact")
         env.put("MESA_SHADER_CACHE_DISABLE", "false")
-        env.put("MESA_SHADER_CACHE_MAX_SIZE", "512MB")
+        env.put("MESA_SHADER_CACHE_MAX_SIZE", "256MB")
         env.put("mesa_glthread", "true")
         env.put("WINEESYNC", "1")
         env.put("MESA_VK_WSI_PRESENT_MODE", "mailbox")
         env.put("TU_DEBUG", "noconform")
         env.put("PULSE_LATENCY_MSEC", "144")
-        env.put("GALLIUM_HUD", "fps")
+        // Avoid the debug FPS overlay during memory-sensitive Steam startup.
+        // Performance can be measured after the guest reaches the game menu.
 
         val driverConfig = KeyValueSet(original.graphicsDriverConfig)
         driverConfig.put("adrenotoolsTurnip", "1")
@@ -89,6 +90,6 @@ object DragonwildsBootstrap {
 
         // Apply once and then persist the flag. No original app data is touched.
         ContainerUtils.setDefaultContainerData(configured)
-        prefs.edit().putBoolean("defaults_v3_applied", true).apply()
+        prefs.edit().putBoolean("defaults_v4_applied", true).apply()
     }
 }
