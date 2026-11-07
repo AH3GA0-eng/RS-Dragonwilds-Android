@@ -257,7 +257,7 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         '            stop();\n',
         '    @Override\n    public void start() {\n'
         '        synchronized (lock) {\n'
-        '            if (container != null && "STEAM_1374490".equals(container.getId())) {\n'
+        '            if (container != null && "STEAM_1374490".equals(container.id)) {\n'
         '                SharedPreferences sp = environment.getContext().getSharedPreferences("dragonwilds_mobile_launch_diagnostics", Context.MODE_PRIVATE);\n'
         '                sp.edit().putInt("bionic_launch_count", sp.getInt("bionic_launch_count", 0) + 1).commit();\n'
         '            }\n'
@@ -277,7 +277,7 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         '            if (pid != -1) {\n'
         '                Process.killProcess(pid);\n',
         '            if (pid != -1) {\n'
-        '                if (container != null && "STEAM_1374490".equals(container.getId())) {\n'
+        '                if (container != null && "STEAM_1374490".equals(container.id)) {\n'
         '                    environment.getContext().getSharedPreferences("dragonwilds_mobile_launch_diagnostics", Context.MODE_PRIVATE).edit()\n'
         '                        .putLong("bionic_kill_time", System.currentTimeMillis())\n'
         '                        .putInt("bionic_kill_pid", pid)\n'
