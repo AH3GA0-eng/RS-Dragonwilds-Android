@@ -6,7 +6,7 @@ on:
     branches: [main]
   push:
     branches:
-      - fix/dragonwilds-v16-cellular-steam-dragon-eye
+      - fix/dragonwilds-v17-cloud-sync-launch
 
 permissions:
   contents: read
