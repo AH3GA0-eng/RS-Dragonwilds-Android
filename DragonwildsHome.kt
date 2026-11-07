@@ -44,6 +44,7 @@ import app.gamenative.utils.SteamUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 
 /**
@@ -73,6 +74,8 @@ internal fun DragonwildsHome(
     var currentFile by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var autoLaunched by rememberSaveable { mutableStateOf(false) }
+    var launchPending by remember { mutableStateOf(false) }
+    var launchNotice by remember { mutableStateOf<String?>(null) }
     var cellularAllowed by remember { mutableStateOf(!PrefManager.downloadOnWifiOnly) }
 
     val holdAutomaticLaunch = remember(context) {
@@ -83,8 +86,42 @@ internal fun DragonwildsHome(
     }
 
     fun startDragonwilds() {
-        DragonwildsDiagnostics.recordLaunch(context)
-        onLaunch()
+        // Prevent two near-simultaneous launch requests from racing each
+        // other for Steam's per-game cloud-save lock.
+        if (launchPending) return
+        launchPending = true
+        launchNotice = null
+        scope.launch {
+            val cloudReady = withTimeoutOrNull(120_000L) {
+                while (SteamService.isCloudSyncActiveForApp(1374490)) {
+                    launchNotice = "Steam is synchronizing Dragonwilds saves. Waiting safely before launching…"
+                    delay(1500L)
+                }
+                true
+            } == true
+            if (!cloudReady) {
+                launchNotice = "Cloud-save sync is still active. Please try Play again after it finishes. No saves were bypassed."
+                launchPending = false
+                return@launch
+            }
+            if (!SteamService.isLoggedIn || !SteamService.isAppInstalled(1374490)) {
+                launchNotice = "Steam or the imported game is no longer ready. Reconnect, then retry."
+                launchPending = false
+                return@launch
+            }
+            launchNotice = "Starting Dragonwilds…"
+            DragonwildsDiagnostics.recordLaunch(context)
+            try {
+                onLaunch()
+                // Keep Play disabled while the existing GameNative launch
+                // pipeline handles the game and any remaining sync checks.
+                delay(30_000L)
+            } catch (e: Exception) {
+                launchNotice = "Launch could not start: " + (e.message ?: e.javaClass.simpleName)
+            } finally {
+                launchPending = false
+            }
+        }
     }
     var resolutionMenu by remember { mutableStateOf(false) }
     var resolution by remember {
@@ -275,14 +312,16 @@ internal fun DragonwildsHome(
                 Text(error ?: "", color = MaterialTheme.colorScheme.error)
             }
 
+            if (launchPending) CircularProgressIndicator()
+            launchNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             Button(
                 onClick = {
                     if (signedIn) startDragonwilds() else onSignIn()
                 },
-                enabled = installed && !importing,
+                enabled = installed && !importing && !launchPending,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Play Dragonwilds")
+                Text(if (launchPending) "Preparing Dragonwilds…" else "Play Dragonwilds")
             }
             if (!installed) {
                 Text("Play is available after the game folder is imported.",
