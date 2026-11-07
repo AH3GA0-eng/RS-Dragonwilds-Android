@@ -247,6 +247,46 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
     # private storage. Repair them before compiling our standalone build.
     bionic_file = repo / 'app/src/main/java/com/winlator/xenvironment/components/BionicProgramLauncherComponent.java'
     bionic_src = bionic_file.read_text(encoding='utf-8')
+    # Track whether a guest exit 137 was caused by our own launcher calling
+    # Process.killProcess, versus a system signal (memory pressure, etc.).
+    # Pure diagnostics: no changes to Steam, Wine, or process-killing semantics.
+    bionic_src = patch_once(
+        bionic_src,
+        '    @Override\n    public void start() {\n'
+        '        synchronized (lock) {\n'
+        '            stop();\n',
+        '    @Override\n    public void start() {\n'
+        '        synchronized (lock) {\n'
+        '            if (container != null && "STEAM_1374490".equals(container.getId())) {\n'
+        '                SharedPreferences sp = environment.getContext().getSharedPreferences("dragonwilds_mobile_launch_diagnostics", Context.MODE_PRIVATE);\n'
+        '                sp.edit().putInt("bionic_launch_count", sp.getInt("bionic_launch_count", 0) + 1).commit();\n'
+        '            }\n'
+        '            startingNewGuest = true;\n'
+        '            try { stop(); } finally { startingNewGuest = false; }\n',
+        'instrument native launcher start and restart attempts',
+    )
+    bionic_src = patch_once(
+        bionic_src,
+        '    private static int pid = -1;\n',
+        '    private static int pid = -1;\n'
+        '    private boolean startingNewGuest = false;\n',
+        'add per-launch restart flag',
+    )
+    bionic_src = patch_once(
+        bionic_src,
+        '            if (pid != -1) {\n'
+        '                Process.killProcess(pid);\n',
+        '            if (pid != -1) {\n'
+        '                if (container != null && "STEAM_1374490".equals(container.getId())) {\n'
+        '                    environment.getContext().getSharedPreferences("dragonwilds_mobile_launch_diagnostics", Context.MODE_PRIVATE).edit()\n'
+        '                        .putLong("bionic_kill_time", System.currentTimeMillis())\n'
+        '                        .putInt("bionic_kill_pid", pid)\n'
+        '                        .putString("bionic_kill_reason", startingNewGuest ? "restart requested" : "session stop requested")\n'
+        '                        .commit();\n'
+        '                }\n'
+        '                Process.killProcess(pid);\n',
+        'trace native deliberate SIGKILL before sending it',
+    )
     bionic_src = patch_once(
         bionic_src,
         'memPath = "/data/data/app.gamenative/files/imagefs/tmp/gamepad.mem";',
