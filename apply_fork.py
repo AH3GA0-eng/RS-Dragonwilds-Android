@@ -35,6 +35,7 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
     gradle = repo / 'app/build.gradle.kts'
     strings = repo / 'app/src/main/res/values/strings.xml'
     bootstrap = repo / 'app/src/main/java/app/gamenative/DragonwildsBootstrap.kt'
+    diagnostics = repo / 'app/src/main/java/app/gamenative/DragonwildsLaunchDiagnostics.kt'
     for file in (mainfile, gradle, strings):
         if not file.is_file():
             raise FileNotFoundError(f'Missing source file {file}; check source tree/revision')
@@ -44,6 +45,12 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         '        ContainerUtils.setContainerDefaults(applicationContext)\n',
         '        ContainerUtils.setContainerDefaults(applicationContext)\n' + INSERT_LINE,
         'first-run defaults')
+
+    main = patch_once(main,
+        '        DragonwildsBootstrap.installFirstRunDefaults(applicationContext)\n',
+        '        DragonwildsBootstrap.installFirstRunDefaults(applicationContext)\n' +
+        '        DragonwildsLaunchDiagnostics.install(applicationContext)\n',
+        'memory diagnostics startup')
 
     gradle_src = gradle.read_text(encoding='utf-8')
     gradle_src = patch_once(gradle_src,
@@ -63,6 +70,7 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         gradle: gradle_src,
         strings: strings_src,
         bootstrap: (ROOT / 'DragonwildsBootstrap.kt').read_text(encoding='utf-8'),
+        diagnostics: (ROOT / 'DragonwildsLaunchDiagnostics.kt').read_text(encoding='utf-8'),
     }
 
 
