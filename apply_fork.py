@@ -153,6 +153,20 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         'capture errors from Wine or headless Steam',
     )
 
+    # Expose a read-only view of Steam's per-game cloud-save lock so this
+    # single-game launcher can wait for a legitimate in-flight sync rather than
+    # sending a second concurrent launch request. Never clear or bypass the lock.
+    steam_file = repo / 'app/src/main/java/app/gamenative/service/SteamService.kt'
+    steam_src = steam_file.read_text(encoding='utf-8')
+    steam_src = patch_once(
+        steam_src,
+        '        private val syncInProgressApps = ConcurrentHashMap<Int, AtomicBoolean>()\n',
+        '        private val syncInProgressApps = ConcurrentHashMap<Int, AtomicBoolean>()\n'
+        '\n'
+        '        fun isCloudSyncActiveForApp(appId: Int): Boolean = syncInProgressApps[appId]?.get() == true\n',
+        'check whether Steam cloud-save sync is active without modifying it',
+    )
+
     # Reconcile the imported Steam app's container at launch time. The upstream
     # Steam game best-config application may overwrite the initial defaults;
     # explicitly restore our Steam/headless and known executable settings just
@@ -378,6 +392,7 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         prereq_file: prereq_src,
         xserver_file: xserver_src,
         steamwatch_file: steamwatch_src,
+        steam_file: steam_src,
         repo / 'app/src/main/java/app/gamenative/utils/preInstallSteps/DragonwildsEosStep.kt': (ROOT / 'DragonwildsEosStep.kt').read_text(encoding='utf-8'),
         repo / 'app/src/main/java/app/gamenative/ui/DragonwildsHome.kt': (ROOT / 'DragonwildsHome.kt').read_text(encoding='utf-8'),
         repo / 'app/src/main/java/app/gamenative/ui/DragonwildsDiagnostics.kt': (ROOT / 'DragonwildsDiagnostics.kt').read_text(encoding='utf-8'),
