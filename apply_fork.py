@@ -58,6 +58,48 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         f'applicationId = "{app_id}"',
         'independent package name')
 
+    # Reuse the existing permanent signing key stored in GitHub Actions.
+    # Ordinary CI without that secret may compile but must not publish an APK.
+    gradle_src = patch_once(
+        gradle_src,
+        '    signingConfigs {\n        create("pluvia") {\n',
+        '    signingConfigs {\n'
+        '        create("dragonwildsStable") {\n'
+        '            val password = System.getenv("DRAGONWILDS_SIGNING_PASSWORD")\n'
+        '            if (!password.isNullOrBlank()) {\n'
+        '                storeFile = rootProject.file("dragonwilds-signing.p12")\n'
+        '                storePassword = password\n'
+        '                keyAlias = "dragonwilds-mobile"\n'
+        '                keyPassword = password\n'
+        '            }\n'
+        '        }\n'
+        '        create("pluvia") {\n',
+        'add established Dragonwilds stable signing config',
+    )
+    gradle_src = patch_once(
+        gradle_src,
+        '        debug {\n'
+        '            isDebuggable = true\n'
+        '            isMinifyEnabled = false\n'
+        '            isShrinkResources = false\n'
+        '            signingConfig = signingConfigs.getByName("debug")\n',
+        '        debug {\n'
+        '            isDebuggable = true\n'
+        '            isMinifyEnabled = false\n'
+        '            isShrinkResources = false\n'
+        '            signingConfig = signingConfigs.getByName(\n'
+        '                if (System.getenv("DRAGONWILDS_SIGNING_PASSWORD").isNullOrBlank()) "debug"\n'
+        '                else "dragonwildsStable"\n'
+        '            )\n',
+        'select established stable signing key',
+    )
+    gradle_src = patch_once(
+        gradle_src,
+        '        versionCode = 24\n',
+        '        versionCode = 10000 + (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 38)\n',
+        'ensure Android update version code increases',
+    )
+
     strings_src = strings.read_text(encoding='utf-8')
     matches = list(re.finditer(r'<string\s+name="app_name">.*?</string>', strings_src, re.DOTALL))
     if len(matches) != 1:
