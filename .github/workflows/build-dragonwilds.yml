@@ -1,8 +1,12 @@
-
 name: Dragonwilds Mobile APK
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches:
+      - fix/dragonwilds-v17-cloud-sync-launch
 
 permissions:
   contents: read
@@ -11,7 +15,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 90
-
     steps:
       - name: Checkout build kit
         uses: actions/checkout@v4
@@ -20,6 +23,11 @@ jobs:
         run: |
           test -f apply_fork.py
           test -f DragonwildsBootstrap.kt
+          test -f DragonwildsHome.kt
+          test -f DragonwildsImport.kt
+          test -f dragonwilds_eye.xml
+          test -f ic_dragonwilds.xml
+          python3 -m py_compile apply_fork.py
           if [ -d tests ]; then
             python3 -m unittest discover -s tests -v
           fi
@@ -27,6 +35,9 @@ jobs:
       - name: Download GameNative source
         run: |
           git clone --depth 1 https://github.com/utkarshdalal/GameNative.git GameNative
+          git -C GameNative fetch --depth 1 origin 44e92bc98aa66d3ce29abf4b6f22c69029c1cccb
+          git -C GameNative checkout --detach 44e92bc98aa66d3ce29abf4b6f22c69029c1cccb
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -35,6 +46,7 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
+
       - name: Install Android dependencies
         run: |
           sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.3.13750724' 'platform-tools'
@@ -47,22 +59,56 @@ jobs:
 
       - name: Apply Dragonwilds modifications
         run: python3 apply_fork.py GameNative
-           
+
+      # Only trusted same-repository push/manual builds produce permanently signed APKs.
+      # One private secret contains a password:base64(PKCS12) bundle.
+      - name: Prepare permanent Android signing key
+        if: github.event_name != 'pull_request'
+        env:
+          SIGNING_BUNDLE: ${{ secrets.DRAGONWILDS_SIGNING_BUNDLE }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${SIGNING_BUNDLE:-}" || "$SIGNING_BUNDLE" != *:* ]]; then
+            echo "::error::Set the DRAGONWILDS_SIGNING_BUNDLE Actions repository secret before publishing an APK."
+            exit 1
+          fi
+          password="${SIGNING_BUNDLE%%:*}"
+          key_b64="${SIGNING_BUNDLE#*:}"
+          printf '%s' "$key_b64" | tr -d '\r\n' | base64 --decode > GameNative/dragonwilds-signing.p12
+          printf '%s' "$password" > GameNative/.dragonwilds-signing-password
+          chmod 600 GameNative/dragonwilds-signing.p12 GameNative/.dragonwilds-signing-password
+          keytool -list -storetype PKCS12 -keystore GameNative/dragonwilds-signing.p12 -storepass "$password" -alias dragonwilds-mobile >/dev/null
+
       - name: Build ARM64 Android APK
         working-directory: GameNative
         run: |
           printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
           find app/src/main/res -type f -name '*.dw-original' -print -delete
           chmod +x gradlew
+          if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
+            export DRAGONWILDS_SIGNING_PASSWORD="$(cat .dragonwilds-signing-password)"
+          fi
           ./gradlew :app:assembleModernDebug --stacktrace --no-daemon --max-workers=2
 
+      - name: Verify permanent APK signer
+        if: github.event_name != 'pull_request'
+        working-directory: GameNative
+        run: |
+          set -euo pipefail
+          mapfile -t apks < <(find app/build/outputs/apk/modern/debug -name '*.apk' -type f)
+          if [[ ${#apks[@]} -ne 1 ]]; then
+            echo "::error::Expected exactly one APK."
+            exit 1
+          fi
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "${apks[0]}" |
+            grep -q 'Signer #1 certificate DN: CN=Dragonwilds Mobile'
+          rm -f dragonwilds-signing.p12 .dragonwilds-signing-password
 
-
-      - name: Upload APK
+      - name: Upload stable-signed APK
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: Dragonwilds-Mobile-APK-UNTESTED
+          name: Dragonwilds-Mobile-STABLE-SIGNED-APK-UNTESTED
           path: GameNative/app/build/outputs/apk/modern/debug/*.apk
           if-no-files-found: error
           retention-days: 14
-          
