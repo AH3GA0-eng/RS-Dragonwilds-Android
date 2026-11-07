@@ -167,6 +167,62 @@ def prepare(repo: Path, app_id: str) -> dict[Path, str]:
         'check whether Steam cloud-save sync is active without modifying it',
     )
 
+    # Upstream's "Wait" button only closes a Sync In Progress dialog, which
+    # users rightly expect to actually wait for the active sync. On Dragonwilds
+    # only, wait on the read-only lock and retry NORMAL cloud-safe launch.
+    ui_src = patch_once(
+        ui_src,
+        '            onDismissClick = {\n'
+        '                setMessageDialogState(MessageDialogState(false))\n'
+        '            }\n'
+        '            onDismissRequest = {\n'
+        '                setMessageDialogState(MessageDialogState(false))\n'
+        '            }\n'
+        '        }\n\n'
+        '        DialogType.PENDING_UPLOAD_IN_PROGRESS -> {\n',
+        '            onDismissClick = {\n'
+        '                setMessageDialogState(MessageDialogState(false))\n'
+        '                if (state.launchedAppId == app.gamenative.DragonwildsBootstrap.GAME_ID) {\n'
+        '                    scope.launch {\n'
+        '                        viewModel.setLoadingDialogVisible(true)\n'
+        '                        viewModel.setLoadingDialogMessage("Waiting for Steam cloud saves to finish safely…")\n'
+        '                        viewModel.setLoadingDialogProgress(-1f)\n'
+        '                        val clear = withTimeoutOrNull(120_000L) {\n'
+        '                            while (SteamService.isCloudSyncActiveForApp(1374490)) delay(1500L)\n'
+        '                            true\n'
+        '                        } == true\n'
+        '                        viewModel.setLoadingDialogVisible(false)\n'
+        '                        if (clear) {\n'
+        '                            preLaunchApp(\n'
+        '                                context = context,\n'
+        '                                appId = state.launchedAppId,\n'
+        '                                setLoadingDialogVisible = viewModel::setLoadingDialogVisible,\n'
+        '                                setLoadingProgress = viewModel::setLoadingDialogProgress,\n'
+        '                                setLoadingMessage = viewModel::setLoadingDialogMessage,\n'
+        '                                setMessageDialogState = setMessageDialogState,\n'
+        '                                onSuccess = viewModel::launchApp,\n'
+        '                                isOffline = viewModel.isOffline.value,\n'
+        '                            )\n'
+        '                        } else {\n'
+        '                            setMessageDialogState(MessageDialogState(\n'
+        '                                visible = true,\n'
+        '                                type = DialogType.SYNC_FAIL,\n'
+        '                                title = context.getString(R.string.sync_error_title),\n'
+        '                                message = "Cloud-save sync is still running. Return to Dragonwilds and retry after it finishes; your saves were not skipped.",\n'
+        '                                dismissBtnText = context.getString(R.string.ok),\n'
+        '                            ))\n'
+        '                        }\n'
+        '                    }\n'
+        '                }\n'
+        '            }\n'
+        '            onDismissRequest = {\n'
+        '                setMessageDialogState(MessageDialogState(false))\n'
+        '            }\n'
+        '        }\n\n'
+        '        DialogType.PENDING_UPLOAD_IN_PROGRESS -> {\n',
+        'make the Dragonwilds cloud-sync Wait action safely wait and retry',
+    )
+
     # Reconcile the imported Steam app's container at launch time. The upstream
     # Steam game best-config application may overwrite the initial defaults;
     # explicitly restore our Steam/headless and known executable settings just
