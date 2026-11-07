@@ -6,7 +6,7 @@ on:
     branches: [main]
   push:
     branches:
-      - fix/dragonwilds-v17-cloud-sync-launch
+      - fix/dragonwilds-v18-kill-source-trace
 
 permissions:
   contents: read
